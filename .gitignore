@@ -1,0 +1,37 @@
+# Local environment and SDKs
+.dotnet/
+tools/
+MelonLoader.Installer.Linux
+dotnet-install.sh
+
+# C# build artifacts
+AgentBridge/bin/
+AgentBridge/obj/
+AgentBridge.Tests/bin/
+AgentBridge.Tests/obj/
+.btd6-check/
+
+# Python harness caches
+__pycache__/
+*.py[cod]
+
+# Node / MCP build artifacts
+btd6-mcp/node_modules/
+btd6-mcp/dist/
+btd6-mcp/logs/
+
+# Local game/loader payloads and generated research state
+loader-payload/
+
+# Machine-specific configuration and secrets
+.omp/
+.env
+.env.*
+!.env.example
+*.local.json
+*.local.props
+
+# Logs & temporary files
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <RootNamespace>AgentBridge</RootNamespace>
+    <AssemblyName>AgentBridge</AssemblyName>
+    <Configurations>Debug;Release</Configurations>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <Optimize>false</Optimize>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <Import Project="$(ModHelperTargets)" />
+
+  <!-- Compilation must never deploy or rewrite launch configuration.
+       Deployment is a separate, explicit operation performed with the game stopped. -->
+  <Target Name="MoveDllToMods" />
+  <Target Name="MoveXmlToMods" />
+  <Target Name="DebugCopyLibs" />
+  <Target Name="SyncLaunchSettings" />
+</Project>
