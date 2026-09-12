@@ -292,9 +292,13 @@ public sealed partial class AgentBridgeMod
             {
                 inGame.Quit();
             }
-
-            if (MenuManager.instance != null && !IsActiveGame())
-                MenuManager.instance.GoToMainMenu();
+            else if (MenuManager.instance is { } manager &&
+                manager.GetCurrentMenu()?.GetIl2CppType().Name != "MainMenu")
+            {
+                // GoToMainMenu closes the current menu; calling it on MainMenu
+                // leaves a black screen. Quit already owns its return transition.
+                manager.GoToMainMenu();
+            }
 
             return SuccessResult(request, new
             {

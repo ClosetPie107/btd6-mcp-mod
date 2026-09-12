@@ -39,7 +39,7 @@ Errors retain submission certainty, retryability and details. Unknown economic/m
 - `btd6_restart_match` — restart the active match from its mode's initial round, cash, and lives through the native simulation restart command, not retry the current round. Clears bridge checkpoints and scheduled abilities. Observe the resulting state before issuing new gameplay actions.
   Defeat-screen restart uses the same committed native restart cleanup. Opening its confirmation dialog and then cancelling preserves checkpoints and pending schedules.
 - `btd6_quit_match` — quit the active match and return to the main menu.
-- `btd6_ensure_main_menu` — return to the main menu; rejects with `UI_BLOCKED` rather than dismissing an unresolved dialog or menu.
+- `btd6_ensure_main_menu` — return to the main menu; repeated calls on an already-ready main menu leave it open. Rejects with `UI_BLOCKED` rather than dismissing an unresolved dialog or menu. Leaving an active match initiates one native quit transition; poll status until `onMainMenu` and `ui.ready` are true before starting another match.
 
 ### Tower Intelligence
 - `btd6_tower_catalog` — live tower index with identity, base cost/range and placement class. An exact native `towerType` filter includes that tower's upgrades; full includes upgrade IDs/costs for the whole catalog.
