@@ -1,113 +1,141 @@
 # BTD6 MCP Mod
 
-Let an AI agent play Bloons TD 6 through game-state reads and native game actions, rather than mouse clicks and screen coordinates.
+Let AI agents play Bloons TD 6 through direct game-state inspection and native game actions, rather than computer vision and mouse clicks.
 
-The project has two parts:
+The project consists of two parts:
 
-- **AgentBridge** — a C# mod loaded by MelonLoader. Reads the running game and executes commands on the game thread.
-- **btd6-mcp** — a local TypeScript [Model Context Protocol](https://modelcontextprotocol.io/) server. Turns those reads and commands into tools for Claude Code, Codex CLI, and other MCP-compatible agent harnesses.
+- **AgentBridge**: A C# mod loaded by MelonLoader that inspects game state and executes actions directly on the game thread.
+- **btd6-mcp**: A local TypeScript [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes those reads and commands as MCP tools for Claude Code, Codex CLI, Antigravity, and other compatible agent harnesses.
 
 ```text
 Agent harness  ← stdio MCP →  btd6-mcp  ← local JSON mailbox →  AgentBridge  ↔  BTD6
 ```
 
-The model chooses the strategy; the bridge handles game access. No model or provider API is embedded in the mod. The MCP server runs outside the game and communicates through local files, not an exposed network port.
+The AI model decides the strategy, while the bridge handles game communication. No model or LLM provider API is embedded in the mod. The MCP server runs outside the game process and communicates via local files rather than open network ports.
 
 ## Why BTD6?
 
-BTD6 is an interesting test of long-term planning and adaptation. A CHIMPS run ends at round 100: the model has to survive the next wave while saving for upgrades that may only pay off much later. Cash spent on an early fix is cash unavailable for the late-game defense, and CHIMPS does not let you sell towers to undo a purchase.
+Bloons TD 6 is a great benchmark for long-term planning and tactical adaptation. A CHIMPS game runs through round 100, requiring the model to balance surviving the current wave against saving cash for expensive late-game upgrades. Selling towers is disabled in CHIMPS, so misallocated cash early on can quietly ruin a run dozens of rounds later.
 
-It also tests whether a model can revise a plan when the defense struggles. Placement, targeting, damage types, and ability timing all matter; buying more damage is not always the answer. Checkpoint-assisted runs let models diagnose a failed round and try a different approach, while unassisted runs test whether they can anticipate those problems before committing.
+It also tests how well models diagnose and recover when defenses leak. Tower placement, targeting priorities, damage types, and ability timings all matter; simply buying more raw DPS is rarely enough. Checkpoint-assisted runs let models inspect why a round failed and try alternate defenses, while unassisted runs test whether they can plan ahead accurately without retries.
 
 ## What agents can do
 
-- **Read and run matches.** Inspect cash, lives, rounds, towers, heroes, abilities, and UI blockers. Start matches, play single rounds or batches with stopping points, change speed, and return to the menu. Failed rounds include threat and leak diagnostics where available.
-- **Reason about the map.** Read track geometry, branching routes, terrain bounds, and tactical PNG maps. Find native-validated placement spots, compare track or support coverage, and inspect selected towers' range and line-of-sight overlays. Positions use game coordinates, not screen pixels.
-- **Build and control a defense.** Place, upgrade, and sell towers; change targeting priorities; set aim points, flight modes, and patrol points; merge Beast Handler beasts; and remove supported paid obstacles. Purchases still obey the game's cash, placement, upgrade, and mode restrictions.
-- **Time abilities and purchases.** Activate abilities immediately or schedule them against the round's simulation clock, including targeted abilities. Schedule ordered tower upgrades for a particular time or when enough cash is available. Pending schedules can be inspected and cancelled; they do not reserve cash.
-- **Plan income and upgrades.** Inspect live costs, tower attacks, buffs, debuffs, popping capabilities, bank balances, and income sources. Project future cash with explicit assumptions, collect banks and ground drops, and estimate Paragon degree, Temple sacrifices, and Monkeyopolis value. These are planning aids, not guaranteed DPS or earnings forecasts.
-- **Micro Geraldo and Corvus.** Inspect Geraldo's shop prices, stock, unlocks, and valid targets; buy and apply items now or on a schedule. Read Corvus's mana, spell costs, cooldowns, and active spells; cast spells or explicitly enable/disable continuous spells, immediately or on a schedule.
-- **Retry from checkpoints.** Save and restore between-round positions to test another defense without replaying the opening. Assisted matches capture automatic checkpoints; named saves support deliberate branches. Explicit export/import carries supported checkpoints across game restarts. Ordinary checkpoints are memory-only, and restoring clears pending schedules.
-- **Test in Sandbox.** Start Sandbox matches, spawn a chosen round's natural waves, and clear bloons. Separate research controls can pause the simulation, set the round number, or advance round-end events for mechanics experiments.
-- **Inspect bosses.** Read the installed boss roster and live boss health, skull progress, defenses, and recognized phases. Unknown mechanics remain marked as unknown.
+- **Inspect and run matches.** Check cash, lives, rounds, placed towers, heroes, abilities, and active UI blockers. Start matches, step through single rounds or batches with custom stop conditions, adjust game speed, and return to the main menu.
+- **Map geometry and placement.** Read track graphs, branching paths, obstacle bounds, and tactical map renders. Query native-validated tower placement spots, range circles, and line-of-sight obstacles using simulation coordinates instead of screen pixels.
+- **Tower placement and micro.** Place, upgrade, and sell towers. Adjust targeting priorities, set custom flight paths or patrol waypoints (Ace and Heli), merge Beast Handlers, and clear removable map obstacles. All actions respect standard in-game cost and mode rules.
+- **Scheduled actions and ability timing.** Trigger abilities on demand or schedule them against the simulation clock (including targeted abilities). Queue upgrades to purchase at a specific time or automatically when cash becomes available.
+- **Stats and income projection.** Inspect effective tower damage, attack speed, pierce, active buffs/debuffs, and popping capabilities. Project future cash, auto-collect bananas and supply drops, collect bank balances, and evaluate Temple sacrifices or Paragon degrees.
+- **Hero micro (Geraldo & Corvus).** Browse Geraldo's shop inventory, check item availability, and purchase items immediately or on schedule. Manage Corvus's mana, cast spells, and toggle continuous spells.
+- **Checkpoints and retries.** Save and restore game states between rounds to iterate on difficult rounds without replaying from round 1. Checkpoint archives can also be exported and imported across game sessions.
+- **Sandbox testing.** Spawn custom waves, clear bloons, test interactions, pause simulation, or adjust round numbers for mechanics experiments.
+- **Boss encounters.** Track active boss health, skull thresholds, immunities, and active phases.
+- **Account provisioning.** Instantly unlock all towers, heroes, upgrades (including Paragons), and all maps and game modes (including CHIMPS) via Mod Settings to make setting up an alt account effortless.
 
-The adapter writes local action journals so purchases, round outcomes, and checkpoint restores can be reviewed after a run. See the [tool reference](btd6-mcp/README.md) for exact options and limitations.
+The MCP server logs all tower purchases, round results, and restores to local action journals for post-run review. See the [tool reference](btd6-mcp/README.md) for full parameter details.
 
 ## Notable model achievements
 
-Selected runs reported by the project maintainer:
+These are individual test runs, not a comprehensive model leaderboard or unassisted black-border clears.
 
 | Model | Harness | Result |
 | --- | --- | --- |
-| GPT 6 Astra | Codex | Beat **Dark Castle CHIMPS**. Reached round 100 on **Party Parade CHIMPS**, but did not beat round 100. |
-| GPT 5.6 Luna | Codex | Beat **Spa Pits CHIMPS** and **Streambed CHIMPS**. |
-| Gemini 3.8 Flash | Antigravity CLI | Beat **Off The Coast CHIMPS** and **Cornfield CHIMPS**. |
+| GPT 6 Astra | Codex | Beat **Dark Castle CHIMPS** (Expert) and **Off The Coast CHIMPS** (Advanced). Reached round 100 on **Party Parade CHIMPS** (Advanced). |
+| GPT 5.6 Luna | Codex | Beat **Spa Pits CHIMPS** (Beginner) and **Streambed CHIMPS** (Intermediate). |
+| Gemini 3.8 Flash | Antigravity CLI | Beat **Off The Coast CHIMPS**, **Cornfield CHIMPS**, **Ascent CHIMPS**, and **Enchanted Glade CHIMPS** (all Advanced). |
 
-These are individual runs, not a controlled model ranking. Checkpoint/retry use and human intervention are not specified here; the results should not be read as verified unassisted or black-border clears.
+All listed runs used checkpoint assistance. Models were allowed to search the web for strategies and choose their own heroes and build orders. Human input was limited to opening-round placement hints on the hardest maps (Dark Castle, Party Parade).
 
 ## Screenshots
 
-Screenshots of models playing will go here.
+All runs shown below used checkpoint assistance.
 
-<!-- Add images below, with captions naming the model, harness, map, mode, and round.
-     Note checkpoint use or other research assistance when relevant.
-     Example once the image exists:
-     ![Model playing a CHIMPS match](screenshots/model-map-chimps.png)
--->
+### GPT 5.6 Luna: Streambed (Intermediate)
+
+**Codex · Sauda · CHIMPS · Round 100/100.**
+
+![GPT 5.6 Luna's Streambed CHIMPS defense with Sauda at round 100](screenshots/gpt-5.6-luna-streambed.png)
+
+### GPT 6 Astra: Dark Castle (Expert)
+
+**Codex · Obyn Greenfoot · CHIMPS · Round 100/100.** Checkpoint-assisted; the CLI summary below records retries and restores.
+
+![GPT 6 Astra's Dark Castle CHIMPS defense with Obyn Greenfoot at round 100](screenshots/gpt6-dark-castle.png)
+
+**Codex CLI completion summary** for the same Dark Castle run:
+
+![Codex CLI reporting GPT 6 Astra's Dark Castle CHIMPS clear and checkpoint-assisted retry history](screenshots/gpt6-dark-castle-chat.png)
+
+### Gemini 3.8 Flash: Ascent (Advanced)
+
+**Antigravity CLI · Geraldo · CHIMPS · Round 100/100.**
+
+![Gemini 3.8 Flash's Ascent CHIMPS defense with Geraldo at round 100](screenshots/gemini-3-8-flash-ascent.jpg)
 
 ## Before installing
 
-**Use a separate modded profile/account and keep it out of normal online or competitive play.** Mods and research controls can affect saves, progression, and account standing. Back up your saves. A separate Proton prefix does not separate an account linked to the same Ninja Kiwi login. This is an unofficial project, not affiliated with Ninja Kiwi.
+### Account safety and alt accounts
 
-The verified setup is **BTD6 56.3 + MelonLoader 0.7.3 + BTD Mod Helper 3.6.8 on Linux/Proton**. Native Windows and other version combinations have not been verified for this project. Game updates can break the bridge.
+**Always use a dedicated alt account for modding.** Keep modded clients away from public multiplayer and competitive modes (Contested Territory, Races, Boss leaderboards), as modded clients will get flagged. Running BTD6 in an isolated Wine/Proton prefix will not protect your main account if both use the same Ninja Kiwi login. This is an unofficial community project and is not affiliated with Ninja Kiwi.
+
+To make testing on an alt account easy without hours of manual grinding, the mod includes built-in **account provisioning controls**:
+- Unlocks all towers and heroes immediately.
+- Unlocks all tower upgrades, including Tier 5s and Paragons.
+- Unlocks all maps and difficulty modes (including CHIMPS).
+
+You can trigger this at any time in-game via **Mods > Mod Settings > AgentBridge > Provision profile** (or through the bridge protocol).
+
+### Prerequisites
+
+The verified environment is **BTD6 56.3 + MelonLoader 0.7.3 + BTD Mod Helper 3.6.8 on Linux/Proton**.
 
 You will need:
 
-- A legitimate Steam copy of BTD6.
-- MelonLoader and BTD Mod Helper, installed below.
-- The **.NET SDK selected by [`global.json`](global.json)**: currently 10.0.400 with patch roll-forward. The mod itself targets .NET 6.
+- A Steam copy of BTD6.
+- MelonLoader and BTD Mod Helper (setup instructions below).
+- The **.NET SDK specified in [`global.json`](global.json)** (currently 10.0.400 with roll-forward). The mod targets .NET 6.
 - **Node.js 20+**, npm, and Git.
-- An MCP-compatible agent harness, with its model access configured separately.
+- An MCP-compatible agent harness with your preferred model configured.
 
-The steps below build from source. This repository does not bundle the game, loader, Mod Helper, or a model. Shell examples use Bash syntax; replace the absolute paths with yours. In PowerShell, use the commands on one line instead of Bash's `\` continuations.
+Commands below assume a Bash shell. On Windows/PowerShell, adjust paths and run multi-line commands on a single line.
 
 ## Installation
 
 ### 1. Install MelonLoader
 
-1. In Steam, right-click BTD6 → **Manage → Browse local files**. Close the game before changing files.
-2. Follow the [official MelonLoader installer guide](https://github.com/LavaGang/MelonLoader#how-to-use-the-installer), selecting `BloonsTD6.exe`. Version **0.7.3** is the version tested here.
-3. Install its runtime prerequisites, including the **.NET 6 Desktop Runtime** for the IL2CPP game. This is separate from the SDK used to compile AgentBridge.
-4. Launch BTD6 once and allow MelonLoader to generate its assemblies and `Mods` folder, then close it.
+1. In Steam, right-click BTD6 and select **Manage > Browse local files**. Make sure the game is closed.
+2. Follow the [official MelonLoader installer guide](https://github.com/LavaGang/MelonLoader#how-to-use-the-installer) and select `BloonsTD6.exe` (tested with version **0.7.3**).
+3. Install the required runtimes, including the **.NET 6 Desktop Runtime** for IL2CPP games. (This is separate from the .NET SDK used to compile the mod).
+4. Launch BTD6 once so MelonLoader can generate its folders (`MelonLoader`, `Mods`), then exit the game.
 
-**Linux/Proton:** follow MelonLoader's [Linux instructions](https://melonwiki.xyz/#/README?id=linux-instructions). Install the Windows runtime into the Proton prefix that actually runs BTD6, not just onto the Linux host. The research setup uses the `version` DLL override in Steam launch options:
+**Linux/Proton:** Follow MelonLoader's [Linux instructions](https://melonwiki.xyz/#/README?id=linux-instructions). Make sure to install the Windows .NET runtime directly into the Proton prefix used by BTD6. Add the DLL override to your BTD6 Steam launch options:
 
 ```text
 WINEDLLOVERRIDES="version=n,b" %command%
 ```
 
-If you use an isolated prefix, keep its `STEAM_COMPAT_DATA_PATH` in those launch options as well. The game and loader need to use that same prefix on every launch.
+If you use a custom prefix, also include `STEAM_COMPAT_DATA_PATH` in the launch options so the game and loader always use the same prefix.
 
 ### 2. Install BTD Mod Helper
 
-Download `Btd6ModHelper.dll` from the [BTD Mod Helper releases](https://github.com/gurrenm3/BTD-Mod-Helper/releases) and put it in the game's `Mods` folder. Version **3.6.8** is the version tested here.
-
-Launch BTD6 and confirm the **Mods** button appears on the main menu, then close the game. The upstream [installation guide](https://github.com/gurrenm3/BTD-Mod-Helper/wiki/Install-Guide) covers troubleshooting.
+1. Download `Btd6ModHelper.dll` from the [BTD Mod Helper releases](https://github.com/gurrenm3/BTD-Mod-Helper/releases) (tested with version **3.6.8**).
+2. Place `Btd6ModHelper.dll` inside the game's `Mods` folder.
+3. Launch BTD6 and confirm the **Mods** button appears on the main menu, then exit. See the [Mod Helper install guide](https://github.com/gurrenm3/BTD-Mod-Helper/wiki/Install-Guide) if you run into issues.
 
 ### 3. Build and install AgentBridge
 
-Clone this repository and enter it:
+If a [release](https://github.com/ClosetPie107/btd6-mcp-mod/releases) provides `AgentBridge.dll`, download it and copy it into the game's `Mods` folder with the game stopped. You do not need the .NET SDK or Mod Helper source checkout for a prebuilt DLL. Use the matching adapter ZIP from that same release as described below. The source-build alternative follows.
+
+Clone this repository:
 
 ```bash
 git clone https://github.com/ClosetPie107/btd6-mcp-mod.git
 cd btd6-mcp-mod
 ```
 
-While the repository is private, cloning requires access and GitHub authentication. SSH users can use `git@github.com:ClosetPie107/btd6-mcp-mod.git` instead.
+You will also need the [BTD Mod Helper source code](https://github.com/gurrenm3/BTD-Mod-Helper/tree/3.6.8) (version 3.6.8) for its `BloonsTD6 Mod Helper/btd6.targets` build file; the compiled DLL alone is not sufficient to build against.
 
-Also obtain a [BTD Mod Helper source checkout](https://github.com/gurrenm3/BTD-Mod-Helper/tree/3.6.8) matching the installed version. The build needs its `BloonsTD6 Mod Helper/btd6.targets` file; the installed DLL alone is not enough.
-
-From this repository's root:
+From the repository root, build the C# project:
 
 ```bash
 dotnet build AgentBridge/AgentBridge.csproj -c Release \
@@ -115,13 +143,15 @@ dotnet build AgentBridge/AgentBridge.csproj -c Release \
   -p:ModHelperTargets="/absolute/path/to/BTD-Mod-Helper/BloonsTD6 Mod Helper/btd6.targets"
 ```
 
-The game path must contain the generated `MelonLoader/Il2CppAssemblies` directory and the installed Mod Helper DLL. On Linux, pass Linux filesystem paths.
+The game path must point to your BTD6 directory containing `MelonLoader/Il2CppAssemblies` and the installed Mod Helper DLL. On Linux, use standard Linux filesystem paths.
 
-With the game **stopped**, copy `AgentBridge/bin/Release/AgentBridge.dll` into its `Mods` folder alongside `Btd6ModHelper.dll`. Building does not install the mod automatically.
+Once built, copy `AgentBridge/bin/Release/AgentBridge.dll` into your game's `Mods` folder alongside `Btd6ModHelper.dll`.
 
-Launch BTD6 and check `MelonLoader/Logs` for AgentBridge loading successfully. Reach the main menu and acknowledge any initial mod warnings. A new DLL always requires a game restart.
+Launch BTD6 and check `MelonLoader/Logs` to verify AgentBridge loads cleanly. Reach the main menu and accept any initial mod prompts. Note that updating the DLL requires restarting the game.
 
 ### 4. Build the MCP server
+
+For a prebuilt release, extract `btd6-mcp-<version>.zip` into a permanent directory and run `npm ci --omit=dev` there. Configure your harness to run that directory's `dist/index.js`. Node.js and npm are still required; Git, TypeScript compilation, and the .NET SDK are not. Keep the DLL and adapter from the same release together. The source-build alternative follows.
 
 From the repository root:
 
@@ -130,23 +160,23 @@ npm --prefix btd6-mcp ci
 npm --prefix btd6-mcp run build
 ```
 
-The entry point is now `btd6-mcp/dist/index.js`.
+This compiles the server to `btd6-mcp/dist/index.js`.
 
-Find the loaded bridge's mailbox, normally:
+Locate the bridge IPC directory created by the mod, usually:
 
 ```text
 <BTD6 installation>/UserData/AgentBridge/ipc
 ```
 
-If your loader stores `UserData` elsewhere, use that actual location. Set **`BTD6_AGENT_BRIDGE_IPC_ROOT` explicitly** in your harness configuration; the adapter's development default is not a portable installation path. For Linux/Proton, this must be a path the native Node process can access, not a Wine drive-letter path.
+Set **`BTD6_AGENT_BRIDGE_IPC_ROOT`** in your harness configuration to this directory. On Linux/Proton, use the Linux path accessible by Node, not a Wine drive-letter path.
 
 ## Connect an agent harness
 
-The harness launches the MCP server itself. Do not start a separate background server. BTD6 must be running with AgentBridge loaded for game reads and actions to work.
+Your harness launches the MCP server directly over stdio, so no separate background process is needed. BTD6 must be running with AgentBridge loaded for game tools to work.
 
 ### Claude Code
 
-Register a local stdio server, replacing both paths:
+Add the server to your Claude Code configuration:
 
 ```bash
 claude mcp add btd6 --transport stdio --scope user \
@@ -154,13 +184,13 @@ claude mcp add btd6 --transport stdio --scope user \
   -- node "/absolute/path/to/btd6-mcp-mod/btd6-mcp/dist/index.js"
 ```
 
-`--scope user` makes it available across your projects. Use `--scope local` instead to limit it to the current project without committing machine-specific paths.
+Use `--scope user` to make it available across projects, or `--scope local` to limit it to the current directory.
 
-Run `claude mcp get btd6`, then open Claude Code and use `/mcp` to inspect the connection and permissions. See [Claude Code's MCP documentation](https://code.claude.com/docs/en/mcp).
+Run `claude mcp get btd6`, then open Claude Code and run `/mcp` to verify the connection. See [Claude Code's MCP documentation](https://code.claude.com/docs/en/mcp).
 
 ### Codex CLI
 
-Register the same server:
+Add the server to Codex:
 
 ```bash
 codex mcp add btd6 \
@@ -168,7 +198,7 @@ codex mcp add btd6 \
   -- node "/absolute/path/to/btd6-mcp-mod/btd6-mcp/dist/index.js"
 ```
 
-Round batches can take longer than Codex's default tool timeout. In `~/.codex/config.toml`, add `tool_timeout_sec` to the existing server table. The complete entry should look like this; do not create a duplicate table:
+Because running multiple rounds can exceed default tool timeouts, add `tool_timeout_sec` to the server definition in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.btd6]
@@ -180,31 +210,33 @@ tool_timeout_sec = 3600
 BTD6_AGENT_BRIDGE_IPC_ROOT = "/absolute/path/to/BloonsTD6/UserData/AgentBridge/ipc"
 ```
 
-Run `codex mcp list`, then use `/mcp` inside Codex to inspect the connection. See [Codex's MCP documentation](https://developers.openai.com/codex/mcp). For either harness, keep batch sizes and round wait limits within the host's tool timeout.
+Run `codex mcp list`, then use `/mcp` inside Codex to verify the setup. See [Codex's MCP documentation](https://developers.openai.com/codex/mcp).
 
 ### Other MCP hosts
 
 Configure a **local stdio** server with:
 
-- **Command:** `node` (or its absolute executable path if it is not on the host's `PATH`).
+- **Command:** `node` (or the full path to your Node binary).
 - **Arguments:** the absolute path to `btd6-mcp/dist/index.js`.
-- **Environment:** `BTD6_AGENT_BRIDGE_IPC_ROOT` pointing to the bridge mailbox.
+- **Environment:** `BTD6_AGENT_BRIDGE_IPC_ROOT` pointing to the bridge's `ipc` directory.
 
-No HTTP URL, port, or bridge API key is needed. The harness still needs its own model credentials. Approve tool access according to what you want the agent to control; this server includes actions that spend cash, replace matches, and restore earlier state.
+No port or network configuration is required. Grant tool permissions as appropriate for your setup, keeping in mind that certain tools can purchase towers, start games, or overwrite save states.
 
 ## First run
 
-Start with a read-only connection check:
+Start with a quick status check:
 
 > Use `btd6_status` to check the connection. Don't start or replace a match yet.
 
-Before asking the agent to play, have it read the bundled [playing guide](btd6-mcp/PLAYING.md), also exposed as the MCP resource `btd6://guides/playing`. For example:
+Before running games, point the agent to the bundled [gameplay guide](btd6-mcp/PLAYING.md) (also available via the `btd6://guides/playing` MCP resource):
 
 > Read the BTD6 playing guide, then start Logs on Hard Standard with Sauda. Use checkpoints to retry failed rounds, but don't use round-setting or round-advancement research controls. Play to victory and report any restores or other assistance used.
 
-For an unassisted attempt, explicitly request `checkpointPolicy: "none"` and prohibit restores and research mutations. **Assisted checkpointing is the default**, so a CHIMPS win alone does not establish an unassisted clear. Automatic ground-drop collection also defaults to enabled; disable it if your rules require manual collection.
+If you prefer a strictly unassisted run, configure `checkpointPolicy: "none"` and instruct the agent not to restore checkpoints or alter rounds. Automatic banana/crate collection is enabled by default; disable it if you want the agent to collect drops manually.
 
-Profile provisioning is optional and changes unlocks; it is not needed to test the connection. After updating C# code, rebuild the DLL and restart the game. After updating TypeScript, rebuild the adapter and reconnect it in the harness.
+If you are playing on a fresh alt account, open the in-game Mod Settings for AgentBridge and click **Provision profile** to unlock all maps, modes, and tower upgrades right away.
+
+When updating the C# mod code, recompile the DLL and restart BTD6. When updating the TypeScript MCP server, run `npm run build` and restart or reconnect the harness.
 
 ## Further reading
 
