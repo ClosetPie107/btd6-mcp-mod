@@ -24,6 +24,22 @@ internal sealed record UiStateV1
     public UiBlockerV1? Blocker { get; init; }
 }
 
+// Gameplay can be usable without a menu object; an empty out-of-game surface cannot.
+internal static class UiSurfaceReadiness
+{
+    public static bool IsReady(bool activeGame, string? screen, bool menuReady, bool transitioning)
+    {
+        if (transitioning) return false;
+        return screen switch
+        {
+            null => activeGame,
+            "MainMenu" or "MapSelectScreen" => menuReady,
+            "InGame" => activeGame && menuReady,
+            _ => false
+        };
+    }
+}
+
 // One controller for both automatic and explicitly requested actions. Only managed
 // identities/timestamps live here; every native target is resolved again before acting.
 internal sealed class UiInterruptionTracker

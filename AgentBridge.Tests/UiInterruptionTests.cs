@@ -15,6 +15,29 @@ internal static class UiInterruptionTests
             tracker.Observe(key, true, true, true, 0.3);
             return tracker;
         }
+        Check(!UiSurfaceReadiness.IsReady(false, null, false, false),
+            "A missing menu outside a match must not report readiness");
+        Check(UiSurfaceReadiness.IsReady(true, null, false, false),
+            "Ordinary gameplay does not require a menu object");
+        Check(!UiSurfaceReadiness.IsReady(true, null, false, true),
+            "An active match must not mask an in-flight menu transition");
+        foreach (string screen in new[] { "MainMenu", "MapSelectScreen" })
+        {
+            Check(UiSurfaceReadiness.IsReady(false, screen, true, false),
+                "An available main menu or map selector must be ready");
+            Check(!UiSurfaceReadiness.IsReady(false, screen, false, false),
+                "An inactive or loading menu must not report readiness");
+            Check(!UiSurfaceReadiness.IsReady(false, screen, true, true),
+                "A menu transition must take precedence over the visible surface");
+        }
+        Check(!UiSurfaceReadiness.IsReady(false, "InGame", true, false),
+            "A stale InGame menu without its match must not report readiness");
+        Check(UiSurfaceReadiness.IsReady(true, "InGame", true, false),
+            "A ready active match must remain usable");
+        Check(!UiSurfaceReadiness.IsReady(false, "TitleScreen", true, false),
+            "Startup must not be mistaken for a usable main menu");
+        Console.WriteLine("PASS UI readiness requires a usable game or menu surface");
+
         var once = Ready();
         Check(once.Begin(once.Id, 0.3), "Ready tutorial should accept acknowledgement");
         once.Observe("popup", true, true, true, 1);

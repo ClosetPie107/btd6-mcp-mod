@@ -6,6 +6,7 @@ using BTD_Mod_Helper;
 using BTD_Mod_Helper.Extensions;
 using HarmonyLib;
 using Il2CppAssets.Scripts.Unity.CollectionEvent;
+using Il2CppAssets.Scripts.Unity;
 using Il2CppAssets.Scripts.Unity.Menu;
 using Il2CppAssets.Scripts.Unity.UI_New.GameOver;
 using Il2CppAssets.Scripts.Unity.UI_New.InGame;
@@ -42,7 +43,8 @@ public sealed partial class AgentBridgeMod
     private sealed record UiCandidate(string Key, string Kind, string Screen, bool Ready,
         bool Automatic, // Owned by automatic policy; readiness is represented separately.
         bool AwaitingReadiness, string[] Actions, Action<string, string?>? Invoke,
-        string? Title = null, string? Body = null, string[]? Choices = null, string? SelectedChoice = null);
+        string? Title = null, string? Body = null, string[]? Choices = null, string? SelectedChoice = null,
+        string? Reason = null);
 
     private static double UiNow => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
     private static string? UiText(string? value) => value == null ? null : value[..Math.Min(value.Length, 4096)];
@@ -136,10 +138,16 @@ public sealed partial class AgentBridgeMod
 
         var manager = MenuManager.instance;
         var menu = manager?.GetCurrentMenu();
-        if (menu == null)
-            return manager?.IsTransitioning == true
-                ? new("menu-loading", "transition", "MenuManager", false, false, true, Array.Empty<string>(), null)
-                : null;
+        bool transitioning = manager?.IsTransitioning == true || manager?.IsClosingOrOpeningMenu == true;
+        if (manager == null || menu == null)
+        {
+            if (UiSurfaceReadiness.IsReady(inGame, null, false, transitioning)) return null;
+            if (Game.instance == null)
+                return new("game-starting", "startup", "Game", false, false, true,
+                    Array.Empty<string>(), null, Reason: "Waiting for the game to initialize.");
+            return new("surface-unavailable", "transition", "MenuManager", false, false, true,
+                Array.Empty<string>(), null, Reason: "Waiting for an active match or a usable menu surface.");
+        }
         string screen = menu.GetIl2CppType().Name;
         bool ready = MenuReady(menu);
         bool owned = gameplayUiAuthorized;
@@ -258,9 +266,13 @@ public sealed partial class AgentBridgeMod
                 automatic ? inGame && canNext : canNext, automatic, automatic,
                 canNext ? new[] { "next" } : Array.Empty<string>(), (_, _) => button!.onClick.Invoke());
         }
-        if (manager!.IsTransitioning || manager.IsClosingOrOpeningMenu || menu.isStillLoading || menu.isAnimatingWithCallback)
+        if (transitioning || menu.isStillLoading || menu.isAnimatingWithCallback)
             return new($"transition:{menu.Pointer}", "transition", screen, false, false, true, Array.Empty<string>(), null);
-        if (screen is "MainMenu" or "MapSelectScreen" or "InGame") return null;
+        if (screen is "MainMenu" or "MapSelectScreen" or "InGame")
+            return UiSurfaceReadiness.IsReady(inGame, screen, ready && menu.gameObject?.activeInHierarchy == true, transitioning)
+                ? null
+                : new($"surface-unavailable:{menu.Pointer}", "transition", screen, false, false, true,
+                    Array.Empty<string>(), null, Reason: "The current menu is inactive, or its match is no longer active.");
         if (screen == "TitleScreen") return new($"title:{menu.Pointer}", "startup", screen, false, false, true, Array.Empty<string>(), null);
         return new($"menu:{menu.Pointer}", "menu", screen, ready, false, false,
             ready ? new[] { "back" } : Array.Empty<string>(), (_, _) => manager.CloseCurrentMenu());
@@ -352,7 +364,7 @@ public sealed partial class AgentBridgeMod
                 Blocker = candidate == null ? null : new UiBlockerV1
                 {
                     Id = uiTracker.Id, Kind = candidate.Kind, Screen = candidate.Screen,
-                    State = uiTracker.State, Reason = UiText(uiTracker.Error),
+                    State = uiTracker.State, Reason = UiText(uiTracker.Error ?? candidate.Reason),
                     Title = candidate.Title, Body = candidate.Body,
                     Actions = uiTracker.CanAct ? candidate.Actions : Array.Empty<string>(),
                     Choices = candidate.Choices ?? Array.Empty<string>(), SelectedChoice = candidate.SelectedChoice

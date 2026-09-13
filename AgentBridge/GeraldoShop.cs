@@ -704,7 +704,7 @@ public sealed partial class AgentBridgeMod
                 if (!context.Bridge.CanPlaceTowerAt(location, towerModel, context.InputId, Il2CppAssets.Scripts.ObjectId.Invalid))
                     return ("INVALID_TARGET", "Native tower footprint or terrain rules reject this Geraldo placement.");
             }
-            if (!context.Bridge.CheckGeraldoPurchaseLocation(location, context.InputId, model))
+            if (!CheckGeraldoLocationIsolated(context, location, model))
                 return ("INVALID_TARGET", "Native Geraldo location validation rejected the requested target.");
             if (target?.Kind == "tower")
             {
@@ -744,6 +744,24 @@ public sealed partial class AgentBridgeMod
         catch (Exception ex)
         {
             return ("NATIVE_STATE_UNAVAILABLE", $"Native Geraldo eligibility could not be verified: {ex.Message}");
+        }
+    }
+
+    private static bool CheckGeraldoLocationIsolated(GeraldoContext context, Vector2 location, GeraldoItemModel model)
+    {
+        // Native CheckLocation reuses currentlyPlacingItem without checking its model.
+        // Keep an existing UI selection alive, but never use it for an independent
+        // bridge quote or leave the quote's temporary item behind (even on rejection).
+        var previousItem = context.Manager.currentlyPlacingItem;
+        context.Manager.currentlyPlacingItem = null;
+        try
+        {
+            return context.Bridge.CheckGeraldoPurchaseLocation(location, context.InputId, model);
+        }
+        finally
+        {
+            try { context.Manager.StopPlacing(); }
+            finally { context.Manager.currentlyPlacingItem = previousItem; }
         }
     }
 

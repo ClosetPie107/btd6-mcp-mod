@@ -89,7 +89,7 @@ Native 56.3 mechanics checks covered paid removals on Dark Castle CHIMPS, Encryp
 ### Geraldo shop
 
 - `btd6_inspect_geraldo` — native item IDs, target kinds, current prices, stock/replenishment, unlock levels and availability for the active player's Geraldo. Native descriptions are nullable when localization is unavailable.
-- `btd6_can_use_geraldo_item({ itemId, target? })` — read-only native target/eligibility check and quote. Does not reserve stock or cash.
+- `btd6_can_use_geraldo_item({ itemId, target? })` — read-only native target/eligibility check and quote. Does not reserve stock or cash. Each check isolates native item-selection state, so checking or rejecting one item cannot change another item's target eligibility.
 - `btd6_use_geraldo_item({ itemId, target?, round?, delaySeconds?, delayFromNow?, whenAffordable?, idempotencyKey? })` — buy and apply one item, immediately by default, including mid-round.
 - `btd6_cancel_scheduled_geraldo_purchase({ scheduleId? })` — cancel one pending purchase; omit the selector or use `"all"` to cancel all pending purchases. Does not undo completed purchases.
 
@@ -266,7 +266,9 @@ Automatic collection enumerates the direct `Pickup` factory in BTD6 56.3, snapsh
 
 ### UI interruptions
 
-Status, observation, and lightweight round progress include `ui: { autoHandlingEnabled, ready, blocker }`. A blocker exposes its `id`, `kind`, `screen`, `state` (`waiting`, `acting`, `blocked`, `failed`), bounded title/body text, failure reason, available `actions`, tower `choices`, and `selectedChoice`. `ready` is true only when no interruption is present. A rewards or unlock screen is not a main menu.
+Status, observation, and lightweight round progress include `ui: { autoHandlingEnabled, ready, blocker }`. A blocker exposes its `id`, `kind`, `screen`, `state` (`waiting`, `acting`, `blocked`, `failed`), bounded title/body text, reason, available `actions`, tower `choices`, and `selectedChoice`. `ready` requires usable gameplay or a ready menu with no interruption. A rewards or unlock screen is not a main menu.
+
+Before game initialization, readiness reports a `startup` blocker. A missing menu outside an active match, an inactive main/menu-selection surface, or a stale `InGame` menu reports a `transition` blocker with an explanation and no actions—not `ready: true`. Existing per-step readiness timeouts apply; engine initialization and menu availability are distinct steps. Recovery clears the blocker without requiring a UI action. Active gameplay does not require a menu object, but native menu transitions still block readiness. This reports game/menu state, not GPU or framebuffer health.
 
 During an authorized agent-started match, the bridge acknowledges only allowlisted first-time gameplay events tagged at `InGame.ShowEventPopup`, level-up acknowledgements, and recognized informational reward panels. It uses normal OK/Next actions and preserves game completion callbacks. Tower unlock selection remains explicit. Main-menu rewards, generic dialogs, account/login prompts, and unrecognized UI are not automatically dismissed. Returning to the main menu ends this authorization; restarting the same match preserves it.
 
